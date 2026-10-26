@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_navigation.html" import child_navigation %}
+{% block title %}Import System Certificate · {{ cluster.name }} · ISE Command Center{% endblock %}
+{% block content %}
+{{ child_navigation(url_for('portal.cluster_certificates', cluster_id=cluster.id)) }}
+<section class="form-wrap">
+  <p class="eyebrow">CERTIFICATE MANAGEMENT</p>
+  <h1>Import System Certificate</h1>
+  <p>Import a PEM certificate and its encrypted private key into {{ cluster.name }}.</p>
+  <form class="form-card" method="post" enctype="multipart/form-data">
+    <div class="two">
+      <label>ISE username<input name="action_username" value="{{ request.form.get('action_username', '') }}" autocomplete="username" required></label>
+      <label>ISE password<input type="password" name="action_password" autocomplete="current-password" required></label>
+    </div>
+    <p class="form-note">These ISE credentials are used only for this import and are not saved.</p>
+    <label>Friendly name<input name="name" value="{{ request.form.get('name', '') }}" maxlength="255"></label>
+    <div class="two">
+      <label>Certificate file<input type="file" name="certificate" accept=".pem,.cer,.crt,application/x-pem-file" required></label>
+      <label>Private-key file<input type="file" name="private_key" accept=".pem,.key,application/x-pem-file" required></label>
+    </div>
+    <label>Private-key password<input type="password" name="private_key_password" autocomplete="new-password" required></label>
+    <fieldset class="certificate-trust-options">
+      <legend>Used for</legend>
+      <div class="certificate-role-option">
+        <label class="check"><input type="checkbox" name="admin" checked> Admin Portal</label>
+        <p class="certificate-restart-warning" role="alert"><strong>Warning:</strong> Assigning the Admin Portal role causes ISE services to restart.</p>
+      </div>
+      <label class="check"><input type="checkbox" name="eap"> EAP Authentication</label>
+      <label class="check"><input type="checkbox" name="ims"> ISE Messaging Service</label>
+      <label class="check"><input type="checkbox" name="portal"> Portal</label>
+      <label class="check"><input type="checkbox" name="pxgrid"> pxGrid</label>
+      <label class="check"><input type="checkbox" name="radius"> RADIUS DTLS</label>
+      <label class="check"><input type="checkbox" name="saml"> SAML Signing</label>
+    </fieldset>
+    <fieldset class="certificate-trust-options">
+      <legend>Validation</legend>
+      <label class="check"><input type="checkbox" name="validate_certificate_extensions" checked> Validate certificate extensions</label>
+      <label class="check"><input type="checkbox" name="allow_extended_validity"> Allow validity longer than 398 days</label>
+      <label class="check"><input type="checkbox" name="allow_wildcard_certificates"> Allow wildcard certificate</label>
+    </fieldset>
+    <p class="form-note">SAML cannot be combined with another usage. Expired and SHA-1 certificates are rejected, and existing certificates are not automatically replaced.</p>
+    <div class="actions"><a href="{{ url_for('portal.cluster_certificates', cluster_id=cluster.id) }}">Cancel</a><button type="submit">Import System Cert</button></div>
+  </form>
+</section>
+{% endblock %}

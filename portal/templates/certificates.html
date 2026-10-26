@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_navigation.html" import child_navigation %}
+{% block title %}Certificates · {{ cluster.name }} · ISE Command Center{% endblock %}
+{% block content %}
+{{ child_navigation(url_for('portal.cluster_details', cluster_id=cluster.id)) }}
+<section class="certificate-page-head">
+  <div>
+    <p class="eyebrow">CERTIFICATE DETAILS</p>
+    <h1>Certificate Management</h1>
+    <p>{{ cluster.name }}</p>
+  </div>
+  <div class="detail-actions">
+    <a href="{{ url_for('portal.cluster_details', cluster_id=cluster.id) }}">← Cluster Details</a>
+    <a class="button" href="{{ url_for('portal.cluster_certificates', cluster_id=cluster.id) }}">Refresh Certificates</a>
+  </div>
+</section>
+
+{% if inventory.errors %}
+<section class="certificate-errors">
+  {% for error in inventory.errors %}<div class="flash warning">{{ error }}</div>{% endfor %}
+</section>
+{% endif %}
+
+<section class="certificate-section">
+  <div class="certificate-section-intro">
+    <div>
+      <h2>System Certificates</h2>
+      <p>Showing certificates whose issuer contains “LTMA” and whose usage contains “Admin”.</p>
+    </div>
+    <a class="button" href="{{ url_for('portal.import_system_certificate', cluster_id=cluster.id) }}">Import System Cert</a>
+  </div>
+  <div class="table certificate-table"><table>
+    <thead><tr><th>Node</th><th>Friendly name</th><th>Issued to</th><th>Issued by</th><th>Used by</th><th>Expiration</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for certificate in inventory.system_certificates %}
+      <tr><td>{{ certificate.hostname }}</td><td class="certificate-name">{{ certificate.friendly_name }}</td><td class="certificate-wrap">{{ certificate.subject }}</td><td class="certificate-wrap">{{ certificate.issued_by }}</td><td>{{ certificate.used_by }}</td><td>{{ certificate.expiration }}</td><td>{{ certificate.status }}</td></tr>
+      {% else %}<tr><td colspan="7">No system certificates were returned.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="certificate-section">
+  <div class="certificate-section-intro">
+    <div>
+      <h2>Trusted Certificates</h2>
+      <p>Showing certificates whose issuer contains “LTMA” and whose trusted-for value contains “Admin”.</p>
+    </div>
+    <a class="button" href="{{ url_for('portal.import_trusted_certificate', cluster_id=cluster.id) }}">Import Trusted Cert</a>
+  </div>
+  <div class="table certificate-table"><table>
+    <thead><tr><th>Friendly name</th><th>Issued to</th><th>Issued by</th><th>Trusted for</th><th>Expiration</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for certificate in inventory.trusted_certificates %}
+      <tr><td class="certificate-name">{{ certificate.friendly_name }}</td><td class="certificate-wrap">{{ certificate.subject }}</td><td class="certificate-wrap">{{ certificate.issued_by }}</td><td>{{ certificate.used_by }}</td><td>{{ certificate.expiration }}</td><td>{{ certificate.status }}</td></tr>
+      {% else %}<tr><td colspan="6">No trusted certificates were returned.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

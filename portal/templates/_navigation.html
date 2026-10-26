@@ -1,0 +1,6 @@
+{% macro child_navigation(previous_url) -%}
+<div class="page-navigation" role="navigation" aria-label="Page navigation">
+  <a href="{{ previous_url }}">← Previous Page</a>
+  <a href="{{ url_for('portal.dashboard') }}">Home</a>
+</div>
+{%- endmacro %}

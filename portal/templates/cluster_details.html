@@ -1,0 +1,148 @@
+{% extends "base.html" %}{% from "_navigation.html" import child_navigation %}{% block title %}{{ cluster.name }} · ISE Atlas{% endblock %}{% block content %}
+{{ child_navigation(url_for('portal.dashboard')) }}
+<style>.detail-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:36px}.detail-head h1{font:700 clamp(42px,6vw,68px)/1 Georgia,serif;margin:5px 0}.detail-actions{display:flex;gap:10px}.detail-grid{display:grid;grid-template-columns:1fr;gap:20px}.detail-panel{background:var(--card);border:1px solid var(--line);padding:26px}.detail-panel h2{font:700 25px Georgia;margin:0 0 20px}.detail-list{margin:0}.detail-list div{display:grid;grid-template-columns:180px 1fr;gap:15px;padding:12px 0;border-bottom:1px solid var(--line)}.detail-list div:last-child{border:0}.detail-list dt{color:var(--muted)}.detail-list dd{margin:0;font-weight:700;overflow-wrap:anywhere}.detail-audit{margin-top:20px}@media(max-width:800px){.detail-head{align-items:start;gap:20px}.detail-grid{grid-template-columns:1fr}.detail-list div{grid-template-columns:1fr;gap:3px}}</style>
+<section class="detail-head"><div><p class="eyebrow">CLUSTER DETAILS</p><h1>{{ cluster.name }}</h1><span class="status {{ cluster.status }}">● {{ cluster.status }}</span></div></section>
+<section class="detail-grid"><article class="detail-panel{% if cluster.status == 'offline' %} offline{% endif %}"><h2>Operational status</h2><dl class="detail-list"><div><dt>Primary PAN</dt><dd>{{ cluster.primary_pan or 'Unavailable' }}</dd></div><div><dt>Nodes</dt><dd>{{ cluster.node_count if cluster.node_count is not none else 'Unavailable' }}</dd></div><div><dt>Version</dt><dd>{{ cluster.version or 'Unavailable' }}</dd></div><div><dt>Latest patch</dt><dd>{{ cluster.latest_patch or 'Unavailable' }}</dd></div><div><dt>Replication</dt><dd>{{ cluster.replication_status or 'Unavailable' }}</dd></div><div><dt>System certificate expirations</dt><dd>{{ cluster.saml_cert_expirations or 'Unavailable' }}</dd></div><div><dt>Last backup attempt</dt><dd>{{ cluster.backup_status or 'Unavailable' }}</dd></div><div><dt>Licensing</dt><dd>{{ cluster.licensing_status or 'Unavailable' }}</dd></div></dl></article><article class="detail-panel"><h2>Connection</h2><dl class="detail-list"><div><dt>PAN01 Base URL</dt><dd>{{ cluster.pan01_base_url }}</dd></div><div><dt>PAN02 Base URL</dt><dd>{{ cluster.pan02_base_url or 'Not configured' }}</dd></div><div><dt>API username</dt><dd>{{ cluster.username or 'Unavailable' }}</dd></div><div><dt>TLS verification</dt><dd>{{ 'Enabled' if cluster.verify_tls else 'Disabled' }}</dd></div><div><dt>CA bundle</dt><dd>{{ cluster.ca_bundle or 'System trust store' }}</dd></div><div><dt>Last checked</dt><dd>{{ cluster.last_checked.strftime('%m/%d/%y %H:%M:%S UTC') if cluster.last_checked else 'Never' }}</dd></div><div><dt>Last API response</dt><dd>{{ cluster.latency_ms|string + ' ms' if cluster.latency_ms else 'Unavailable' }}</dd></div></dl></article></section>
+<section class="detail-audit"><div class="section-title"><div><p class="eyebrow">TRACEABILITY</p><h2>Recent cluster activity</h2></div></div><div class="table"><table><thead><tr><th>Time (UTC)</th><th>Actor</th><th>Action</th><th>Result</th><th>Detail</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td>{{ event.actor }}</td><td>{{ event.action }}</td><td>{{ event.result }}</td><td>{{ event.detail or '—' }}</td></tr>{% else %}<tr><td colspan="5">No activity recorded for this cluster.</td></tr>{% endfor %}</tbody></table></div></section>
+<style>.detail-list dd{white-space:pre-line;line-height:1.65}</style>
+<script>
+const detailNodeStatuses = {{ cluster.node_status_list|default([])|tojson }};
+const replicationLabel = [...document.querySelectorAll('.detail-list dt')].find((item) => item.textContent.trim() === 'Replication');
+const nodesLabel = [...document.querySelectorAll('.detail-list dt')].find((item) => item.textContent.trim() === 'Nodes');
+const licensingLabel = [...document.querySelectorAll('.detail-list dt')].find((item) => item.textContent.trim() === 'Licensing');
+const certificateLabel = [...document.querySelectorAll('.detail-list dt')].find((item) => item.textContent.trim() === 'System certificate expirations');
+replicationLabel?.parentElement.remove();
+licensingLabel?.parentElement.remove();
+if (certificateLabel) certificateLabel.textContent = 'System Cert Status';
+if (nodesLabel) {
+  nodesLabel.textContent = 'Status of Nodes';
+  const output = nodesLabel.nextElementSibling;
+  output.replaceChildren();
+  output.className = 'node-status-indicators';
+  if (detailNodeStatuses.length === 0) {
+    output.textContent = 'Unavailable';
+  } else {
+    detailNodeStatuses.forEach((node) => {
+      const square = document.createElement('span');
+      square.className = `node-status-square${String(node.status).toLowerCase() === 'connected' ? ' connected' : ''}`;
+      square.title = `${node.name}: ${node.status}`;
+      square.setAttribute('aria-label', `${node.name}: ${node.status}`);
+      output.appendChild(square);
+    });
+  }
+}
+
+const operationalData = {
+  version: {{ (cluster.version or 'Unavailable')|tojson }},
+  latestPatch: {{ (cluster.latest_patch or 'Unavailable')|tojson }},
+  backup: {{ (cluster.backup_status or 'Unavailable')|tojson }},
+  nodes: {{ cluster.node_detail_list|default([])|tojson }}
+};
+const operationalOffline = {{ (cluster.status == 'offline')|tojson }};
+const certificateManagementUrl = {{ url_for('portal.cluster_certificates', cluster_id=cluster.id)|tojson }};
+const editSettingsUrl = {{ url_for('portal.edit_cluster', cluster_id=cluster.id, next=url_for('portal.cluster_details', cluster_id=cluster.id))|tojson }};
+const operationalPanel = document.querySelector('.detail-panel');
+if (operationalPanel) {
+  operationalPanel.replaceChildren();
+  const panelHeader = document.createElement('div'); panelHeader.className = 'operational-panel-header';
+  const heading = document.createElement('h2');
+  heading.textContent = 'Operational Status';
+  const manageCertificates = document.createElement(operationalOffline ? 'span' : 'a');
+  manageCertificates.className = `button small${operationalOffline ? ' disabled' : ''}`;
+  if (operationalOffline) {
+    manageCertificates.setAttribute('aria-disabled', 'true');
+    manageCertificates.title = 'Certificate management is unavailable while the cluster is offline.';
+  } else {
+    manageCertificates.href = certificateManagementUrl;
+  }
+  manageCertificates.textContent = 'Manage Certificates';
+  panelHeader.append(heading, manageCertificates);
+  operationalPanel.appendChild(panelHeader);
+
+  const summary = document.createElement('dl');
+  summary.className = 'operational-summary';
+  [['Version', operationalData.version], ['Latest patch', operationalData.latestPatch]].forEach(([label, value]) => {
+    const term = document.createElement('dt'); term.textContent = label;
+    const description = document.createElement('dd'); description.textContent = value;
+    summary.append(term, description);
+  });
+  operationalPanel.appendChild(summary);
+
+  const tableWrap = document.createElement('div');
+  tableWrap.className = 'node-detail-table';
+  const table = document.createElement('table');
+  const header = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  ['Hostname', 'Personas', 'Role(s)', 'Services', 'System Cert Status', 'Node Status'].forEach((label) => {
+    const th = document.createElement('th'); th.textContent = label; headerRow.appendChild(th);
+  });
+  header.appendChild(headerRow);
+  const body = document.createElement('tbody');
+  operationalData.nodes.forEach((node) => {
+    const row = document.createElement('tr');
+    const hostname = document.createElement('td'); hostname.textContent = node.hostname; hostname.className = 'node-hostname';
+    const personas = document.createElement('td'); personas.textContent = node.personas.join(', ') || 'Unavailable';
+    const roles = document.createElement('td'); roles.textContent = node.roles.join(', ') || '—';
+    const services = document.createElement('td'); services.textContent = node.services.join(', ') || 'Unavailable';
+    const cert = document.createElement('td');
+    if (operationalOffline) {
+      cert.className = 'offline-indicator-cell';
+      cert.textContent = '--';
+    } else {
+      const certContent = document.createElement('div'); certContent.className = 'cert-cell-inner';
+      const certSquare = document.createElement('span'); certSquare.className = `certificate-status-square ${node.certificate_status}`;
+      certSquare.title = node.hostname;
+      const certList = document.createElement('span'); certList.className = 'cert-list';
+      if (node.certificates.length) {
+        node.certificates.forEach((certificate) => {
+          const line = document.createElement('span');
+          line.textContent = `${certificate.friendly_name} — ${certificate.expiration}`;
+          certList.appendChild(line);
+        });
+      } else {
+        certList.textContent = 'No matching certificate';
+      }
+      certContent.append(certSquare, certList); cert.appendChild(certContent);
+    }
+    const nodeState = document.createElement('td'); nodeState.className = 'node-state-cell';
+    if (operationalOffline) {
+      nodeState.classList.add('offline-indicator-cell');
+      nodeState.textContent = '--';
+    } else {
+      const nodeSquare = document.createElement('span');
+      nodeSquare.className = `node-status-square${String(node.node_status).toLowerCase() === 'connected' ? ' connected' : ''}`;
+      nodeSquare.title = `${node.hostname}: ${node.node_status}`;
+      nodeState.appendChild(nodeSquare);
+    }
+    row.append(hostname, personas, roles, services, cert, nodeState);
+    body.appendChild(row);
+  });
+  if (!operationalData.nodes.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td'); cell.colSpan = 6; cell.textContent = 'Refresh details to load node information.';
+    row.appendChild(cell); body.appendChild(row);
+  }
+  table.append(header, body); tableWrap.appendChild(table); operationalPanel.appendChild(tableWrap);
+
+  const backup = document.createElement('dl'); backup.className = 'operational-backup';
+  const backupTerm = document.createElement('dt'); backupTerm.textContent = 'Last backup attempt';
+  const backupValue = document.createElement('dd'); backupValue.textContent = operationalData.backup;
+  backup.append(backupTerm, backupValue); operationalPanel.appendChild(backup);
+}
+
+const connectionPanel = document.querySelectorAll('.detail-panel')[1];
+if (connectionPanel) {
+  const connectionHeading = connectionPanel.querySelector('h2');
+  if (connectionHeading) {
+    const connectionHeader = document.createElement('div');
+    connectionHeader.className = 'operational-panel-header';
+    const editSettings = document.createElement('a');
+    editSettings.className = 'button';
+    editSettings.href = editSettingsUrl;
+    editSettings.textContent = 'Edit Settings';
+    connectionHeading.replaceWith(connectionHeader);
+    connectionHeader.append(connectionHeading, editSettings);
+  }
+}
+</script>
+{% endblock %}

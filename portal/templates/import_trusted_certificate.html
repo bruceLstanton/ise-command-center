@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_navigation.html" import child_navigation %}
+{% block title %}Import Trusted Certificate · {{ cluster.name }} · ISE Command Center{% endblock %}
+{% block content %}
+{{ child_navigation(url_for('portal.cluster_certificates', cluster_id=cluster.id)) }}
+<section class="form-wrap">
+  <p class="eyebrow">CERTIFICATE MANAGEMENT</p>
+  <h1>Import Trusted Certificate</h1>
+  <p>Import a PEM-encoded CA certificate into the trusted certificate store for {{ cluster.name }}.</p>
+
+  <form class="form-card" method="post" enctype="multipart/form-data">
+    <div class="two">
+      <label>Username
+        <input name="action_username" value="{{ request.form.get('action_username', '') }}" autocomplete="username" required>
+      </label>
+      <label>Password
+        <input type="password" name="action_password" autocomplete="current-password" required>
+      </label>
+    </div>
+    <p class="form-note">These credentials are used only for this certificate import and are not saved.</p>
+    <label>Certificate file
+      <input type="file" name="certificate" accept=".pem,.cer,.crt,application/x-pem-file" required>
+    </label>
+    <label>Friendly name
+      <input name="name" value="{{ request.form.get('name', '') }}" maxlength="255">
+    </label>
+    <label>Description
+      <input name="description" value="{{ request.form.get('description', '') }}" maxlength="1024">
+    </label>
+
+    <fieldset class="certificate-trust-options">
+      <legend>Trusted for</legend>
+      <label class="check"><input type="checkbox" name="trust_for_ise_auth" checked> Authentication within ISE</label>
+      <label class="check"><input type="checkbox" name="trust_for_client_auth" checked> Client authentication and Syslog</label>
+      <label class="check"><input type="checkbox" name="trust_for_certificate_based_admin_auth" checked> Certificate-based admin authentication</label>
+      <label class="check"><input type="checkbox" name="trust_for_cisco_services_auth"> Authentication of Cisco Services</label>
+      <label class="check"><input type="checkbox" name="validate_certificate_extensions" checked> Validate certificate extensions</label>
+    </fieldset>
+
+    <p class="form-note">ISE and client authentication are automatically enabled when certificate-based admin authentication is selected. Expired, SHA-1, and non-CA certificates are rejected.</p>
+    <div class="actions">
+      <a href="{{ url_for('portal.cluster_certificates', cluster_id=cluster.id) }}">Cancel</a>
+      <button type="submit">Import Trusted Cert</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

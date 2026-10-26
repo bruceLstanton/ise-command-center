@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+instance/
+.env
+.pytest_cache/
+
+
+# Local diagnostics and generated artifacts
+work/
+outputs/
+.env.*
+!.env.example
+

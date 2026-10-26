@@ -1,0 +1,164 @@
+{% extends "base.html" %}{% block content %}
+<style>.summary-metrics{grid-template-columns:repeat(3,1fr)}.cluster-facts{display:grid!important;grid-template-columns:1fr 1fr;gap:0!important;border-top:1px solid var(--line);margin:18px 0 0}.cluster-facts div{padding:11px 8px 11px 0;border-bottom:1px solid var(--line)}.cluster-facts .wide{grid-column:1/-1}.cluster-facts .align-right{text-align:right}.cluster-facts dt{font-size:11px!important;letter-spacing:.7px;text-transform:uppercase}.cluster-facts dd{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cluster-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}.cluster-actions form{width:100%}.cluster-actions button,.cluster-actions a{display:flex;align-items:center;justify-content:center;width:100%;height:40px;margin:0;padding:0 10px;white-space:nowrap}.cluster-actions .secondary{background:transparent;color:var(--ink);border:1px solid var(--line)}.cluster-actions .danger{background:transparent;color:var(--red);border:1px solid #d7a9a2}.cluster-actions .danger:hover{background:#f4dcd7}.attention-filter{display:block;margin:5px 0 0;padding:0;border:0;background:transparent;color:var(--blue-dark);font:600 28px "Segoe UI",Arial,sans-serif;text-align:left}.attention-filter:not(:disabled){color:var(--blue);cursor:pointer}.attention-filter:not(:disabled):hover,.attention-filter[aria-pressed="true"]{background:transparent;color:var(--blue-hover);text-decoration:underline}.attention-filter:disabled{cursor:default;opacity:1}.cluster[hidden]{display:none}</style>
+<style>.summary-metrics{grid-template-columns:repeat(2,1fr)}.details-link{color:var(--green);font-weight:700}.details-link:hover{text-decoration:underline}</style>
+<section class="hero"><div><p class="eyebrow">GLOBAL CONTROL PLANE</p><h1>Every ISE deployment.<br><em>One operational view.</em></h1></div><div class="score"><strong data-global-health>{{ clusters|selectattr('status','equalto','healthy')|list|length }}/{{ clusters|length }}</strong><span>clusters healthy</span></div></section>
+{% set attention_count = clusters|rejectattr('status','equalto','healthy')|list|length %}
+<section class="metrics summary-metrics"><article><span>Clusters</span><strong>{{ clusters|length }}</strong></article><article><span>Clusters Requiring Attention</span><button type="button" class="attention-filter" data-attention data-attention-filter aria-pressed="false" aria-label="Show only clusters needing attention" {% if attention_count == 0 %}disabled{% endif %}>{{ attention_count }}</button></article></section>
+<div class="section-title"><div><p class="eyebrow">CLUSTER INVENTORY</p><h2>Cluster status</h2></div><a class="button" href="{{ url_for('portal.add_cluster') }}">Add Cluster</a></div>
+<section class="grid">{% for cluster in clusters %}<article class="cluster{% if cluster.status == 'offline' %} offline{% endif %}" data-cluster-card><div class="cluster-top"><span class="status {{ cluster.status }}" data-cluster-status>● {{ cluster.status }}</span><a class="details-link" href="{{ url_for('portal.cluster_details', cluster_id=cluster.id) }}">Details →</a></div><h3>{{ cluster.name }}</h3><dl class="cluster-facts"><div><dt>Primary PAN</dt><dd data-field="primary_pan" title="{{ cluster.primary_pan or 'Unavailable' }}">{{ cluster.primary_pan or 'Unavailable' }}</dd></div><div class="align-right"><dt>Number of nodes</dt><dd data-field="node_count">{{ cluster.node_count if cluster.node_count is not none else 'Unavailable' }}</dd></div><div><dt>Version</dt><dd data-field="version">{{ cluster.version or 'Unavailable' }}</dd></div><div class="align-right"><dt>Latest patch</dt><dd data-field="latest_patch">{{ cluster.latest_patch or 'Unavailable' }}</dd></div><div class="wide"><dt>Replication status</dt><dd data-field="replication_status" title="{{ cluster.replication_status or 'Unavailable' }}">{{ cluster.replication_status or 'Unavailable' }}</dd></div><div class="wide"><dt>System certificate expirations</dt><dd data-field="saml_cert_expirations" title="{{ cluster.saml_cert_expirations or 'Unavailable' }}">{{ cluster.saml_cert_expirations or 'Unavailable' }}</dd></div><div class="wide"><dt>Last successful backup</dt><dd data-field="backup_status" title="{{ cluster.backup_status or 'Unavailable' }}">{{ cluster.backup_status or 'Unavailable' }}</dd></div><div class="wide"><dt>Licensing / status</dt><dd data-field="licensing_status" title="{{ cluster.licensing_status or 'Unavailable' }}">{{ cluster.licensing_status or 'Unavailable' }}</dd></div></dl><div class="cluster-actions"><form class="refresh-form" method="post" action="{{ url_for('portal.check_cluster', cluster_id=cluster.id) }}"><button>Refresh details</button></form><a class="button secondary" href="{{ url_for('portal.edit_cluster', cluster_id=cluster.id, next=url_for('portal.dashboard')) }}">Edit</a><form method="post" action="{{ url_for('portal.delete_cluster', cluster_id=cluster.id) }}" onsubmit="return confirm('Remove this cluster from the inventory? This does not change the ISE deployment itself.');"><button class="danger" aria-label="Remove {{ cluster.name }}">Remove</button></form></div></article>{% else %}<article class="empty"><h3>No clusters connected</h3><p>Add your first ISE deployment to begin.</p><a class="button" href="{{ url_for('portal.add_cluster') }}">Add cluster</a></article>{% endfor %}</section>
+<div class="section-title"><div><p class="eyebrow">TRACEABILITY</p><h2>Recent activity</h2></div><a href="{{ url_for('portal.audit_log') }}">View all →</a></div>
+<section class="table"><table><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Result</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ event.action }}</td><td>{{ event.target }}</td><td><span class="status {{ 'healthy' if event.result == 'success' else 'offline' }}">{{ event.result }}</span></td></tr>{% else %}<tr><td colspan="4">No activity yet.</td></tr>{% endfor %}</tbody></table></section>
+<script>
+const initialNodeStatuses = [{% for cluster in clusters %}{{ cluster.node_status_list|default([])|tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+const initialCertificateStatuses = [{% for cluster in clusters %}{{ cluster.system_certificate_status_list|default([])|tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+const attentionFilter = document.querySelector('[data-attention-filter]');
+
+function applyAttentionFilter() {
+  const active = attentionFilter?.getAttribute('aria-pressed') === 'true';
+  document.querySelectorAll('[data-cluster-card]').forEach((card) => {
+    const healthy = card.querySelector('[data-cluster-status]')?.classList.contains('healthy');
+    card.hidden = Boolean(active && healthy);
+  });
+}
+
+function updateAttentionFilter(count) {
+  if (!attentionFilter) return;
+  attentionFilter.textContent = count;
+  attentionFilter.disabled = count === 0;
+  if (count === 0) attentionFilter.setAttribute('aria-pressed', 'false');
+  applyAttentionFilter();
+}
+
+attentionFilter?.addEventListener('click', () => {
+  if (attentionFilter.disabled) return;
+  const active = attentionFilter.getAttribute('aria-pressed') === 'true';
+  attentionFilter.setAttribute('aria-pressed', String(!active));
+  attentionFilter.setAttribute('aria-label', active ? 'Show only clusters needing attention' : 'Show all clusters');
+  applyAttentionFilter();
+});
+
+function renderOfflineIndicator(output) {
+  output.replaceChildren();
+  output.className = 'offline-indicator';
+  output.removeAttribute('title');
+  output.textContent = '--';
+}
+
+function renderNodeStatuses(output, nodes, offline = false) {
+  if (offline) {
+    renderOfflineIndicator(output);
+    return;
+  }
+  output.replaceChildren();
+  output.className = 'node-status-indicators';
+  output.removeAttribute('title');
+  if (!Array.isArray(nodes) || nodes.length === 0) {
+    output.textContent = 'Unavailable';
+    return;
+  }
+  nodes.forEach((node) => {
+    const square = document.createElement('span');
+    square.className = `node-status-square${String(node.status).toLowerCase() === 'connected' ? ' connected' : ''}`;
+    square.title = `${node.name}: ${node.status}`;
+    square.setAttribute('aria-label', `${node.name}: ${node.status}`);
+    output.appendChild(square);
+  });
+}
+
+function renderCertificateStatuses(output, nodes, offline = false) {
+  if (offline) {
+    renderOfflineIndicator(output);
+    return;
+  }
+  output.replaceChildren();
+  output.removeAttribute('title');
+  output.className = 'node-status-indicators';
+  if (!Array.isArray(nodes) || nodes.length === 0) {
+    output.textContent = 'Unavailable';
+    return;
+  }
+  nodes.forEach((node) => {
+    const square = document.createElement('span');
+    square.className = `certificate-status-square ${node.status}`;
+    square.title = node.name;
+    square.setAttribute('aria-label', node.name);
+    output.appendChild(square);
+  });
+}
+
+document.querySelectorAll('[data-cluster-card]').forEach((card, index) => {
+  const offline = card.classList.contains('offline');
+  const output = card.querySelector('[data-field="node_count"]');
+  if (output) {
+    output.dataset.field = 'node_statuses';
+    output.previousElementSibling.textContent = 'Status of Nodes';
+    renderNodeStatuses(output, initialNodeStatuses[index], offline);
+  }
+  card.querySelector('[data-field="replication_status"]')?.parentElement.remove();
+  card.querySelector('[data-field="licensing_status"]')?.parentElement.remove();
+  const certificateOutput = card.querySelector('[data-field="saml_cert_expirations"]');
+  if (certificateOutput) {
+    certificateOutput.parentElement.classList.add('align-right');
+    certificateOutput.previousElementSibling.textContent = 'System Cert Status';
+    certificateOutput.dataset.field = 'system_certificate_statuses';
+    renderCertificateStatuses(certificateOutput, initialCertificateStatuses[index], offline);
+  }
+});
+
+document.querySelectorAll('.refresh-form').forEach((form) => {
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const card = form.closest('[data-cluster-card]');
+    const button = form.querySelector('button');
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Refreshing…';
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'},
+        credentials: 'same-origin'
+      });
+      const data = await response.json();
+      const offline = String(data.status).toLowerCase() === 'offline';
+      card.classList.toggle('offline', offline);
+      Object.entries(data).forEach(([field, value]) => {
+        if (field === 'node_statuses' || field === 'system_certificate_statuses') return;
+        const output = card.querySelector(`[data-field="${field}"]`);
+        if (output) {
+          output.textContent = value;
+          output.title = value;
+        }
+      });
+      renderNodeStatuses(card.querySelector('[data-field="node_statuses"]'), data.node_statuses, offline);
+      renderCertificateStatuses(
+        card.querySelector('[data-field="system_certificate_statuses"]'),
+        data.system_certificate_statuses,
+        offline
+      );
+      const status = card.querySelector('[data-cluster-status]');
+      status.className = `status ${data.status}`;
+      status.textContent = `● ${data.status}`;
+      const cards = [...document.querySelectorAll('[data-cluster-card]')];
+      const healthy = cards.filter((item) => item.querySelector('[data-cluster-status]').classList.contains('healthy')).length;
+      document.querySelector('[data-global-health]').textContent = `${healthy}/${cards.length}`;
+      updateAttentionFilter(cards.length - healthy);
+    } catch (error) {
+      card.classList.add('offline');
+      const status = card.querySelector('[data-cluster-status]');
+      status.className = 'status offline';
+      status.textContent = '● offline';
+      renderOfflineIndicator(card.querySelector('[data-field="node_statuses"]'));
+      renderOfflineIndicator(card.querySelector('[data-field="system_certificate_statuses"]'));
+      const cards = [...document.querySelectorAll('[data-cluster-card]')];
+      const healthy = cards.filter((item) => item.querySelector('[data-cluster-status]').classList.contains('healthy')).length;
+      document.querySelector('[data-global-health]').textContent = `${healthy}/${cards.length}`;
+      updateAttentionFilter(cards.length - healthy);
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  });
+});
+</script>
+{% endblock %}
